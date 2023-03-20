@@ -3,119 +3,120 @@ const app = express();
 const swaggerUi = require('swagger-ui-express');
 const yamlJs = require('yamljs');
 const swaggerDocument = yamlJs.load('./swagger.yaml');
-const {v4: uuidv4} = require('uuid');
+const mysql = require('mysql');
+const path = require('path');
+const bodyParser = require('body-parser');
+const bcrypt = require('bcrypt');
 
 require('dotenv').config();
 
+const connection = mysql.createConnection({
+    host: "localhost",
+    user: "root",
+    password: "qwerty",
+    database: 'olmsp'
+});
+
 const port = process.env.PORT || 3000;
 
-let sessions = [];
-let users = [
-    {id: 1, email: 'admin@admin.com', password: 'admin'}
-];
 // Serve static files
 app.use(express.static('public'));
 
 // Use the Swagger UI
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
-// Middleware to parse JSON
-app.use(express.json());
+// Middleware to parse JSON and urlencoded request bodies
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: false }));
 
 // General error handler
 app.use((err, req, res, next) => {
     console.error(err.stack);
     const status = err.statusCode || 500;
     res.status(status).send(err.message);
-})
+});
 
-// Routes
-app.post('/sessions', (req, res) => {
-    // Validate email and password
-    if (!req.body.email || !req.body.password) {
-        return res.status(400).send('Email and password are required')
-    }
-    // Get user
-    const user = users.find(user => user.email === req.body.email)
-    if (!user) {
-        return res.status(400).send('User not found')
-    }
-    // Check password
-    if (user.password !== req.body.password) {
-        return res.status(400).send('Invalid password')
+// Register endpoint
+app.post('/users', (req, res) => {
+    // Get the required information from the request body
+    const username = req.body.username;
+    const email = req.body.email;
+    const password = req.body.password;
+    const confirmPassword = req.body['confirm-password'];
+
+    // Perform validation checks
+    if (!username || !email || !password || !confirmPassword) {
+        return res.status(400).json({ message: 'All fields are required' });
     }
 
-    // If valid, create a session
-    const session = {
-        id: uuidv4(),
-        userId: user.id,
-        createdAt: new Date()
+    // Validate email structure
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+        return res.status(400).json({ message: 'Email address is invalid' });
     }
 
-    // Add session to sessions array
-    sessions.push(session)
-
-    // Return a new session
-    res.status(201).send({sessionId: session.id})
-})
-
-function authenticateRequest(req, res, next) {
-
-    // Check for authorization header
-    const authHeader = req.headers.authorization
-    if (!authHeader) {
-        return res.status(401).send('Authorization header is required')
+    // Validate username length
+    if (username.length < 6 || username.length > 12) {
+        return res.status(400).json({ message: 'Username must be between 6 and 12 characters long' });
     }
 
-    // Check Authorization header format
-    const authHeaderParts = authHeader.split(' ')
-    if (authHeaderParts.length !== 2 || authHeaderParts[0] !== 'Bearer') {
-        return res.status(401).send('Authorization header format must be "Bearer {token}"')
+    // Validate password length and format
+    if (password.length < 6 || password.length > 20) {
+        return res
+            .status(400)
+            .json({ message: 'Password must be between 6 and 20 characters long' });
     }
 
-    // Get session ID from header
-    const sessionId = authHeaderParts[1]
 
-    // Validate session ID
-    if (!sessionId) {
-        return res.status(401).send('Session ID is required')
+    if (!/\d/.test(password)) {
+        return res.status(400).json({ message: 'Password must contain at least one number' });
     }
 
-    // Get session
-    const session = sessions.find(session => session.id === sessionId)
-
-    // If session not found, return 401
-    if (!session) {
-        return res.status(401).send('Invalid session')
+    if (password !== confirmPassword) {
+        return res.status(400).json({ message: 'Passwords do not match' });
     }
 
-    // Get user
-    const user = users.find(user => user.id === session.userId)
+    // Hash the password
+    const saltRounds = 10;
+    bcrypt.hash(password, saltRounds, (err, hashedPassword) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ message: 'Error hashing password' });
+        }
 
-    // Validate user
-    if (!user) {
-        return res.status(401).send('User not found')
-    }
 
-    // Add session to request
-    req.session = session
 
-    // Add user to request
-    req.user = user
 
-    // Continue processing the request
-    next()
-}
+// Check if the database is connected
+        connection.connect((err) => {
+            if (err) {
+                console.error('Error connecting to the database: ' + err.stack);
+                return res.status(500).json({ message: 'Error connecting to the database' });
+            }
+            console.log('Connected to the database as ID ' + connection.threadId);
 
-app.delete('/sessions', authenticateRequest, (req, res) => {
+            // Perform the account creation and database storage code here
+            const sql = 'INSERT INTO olmsp.users_info (name, email, password) VALUES (?, ?, ?)';
+            const values = [username, email, hashedPassword];
+            connection.query(sql, values, (error, results) => {
+                if (error) {
+                    console.error(error);
+                    return res.status(500).json({ message: 'Database error' });
+                }
+                console.log('New user added to the database:', results);
+                return res.status(201).json({ message: 'Account created successfully' });
+            })
+    });
+    });
+});
 
-    // Remove session from sessions array
-    sessions = sessions.filter(session => session.id !== req.session.id)
 
-    // Return a 204 with no content if the session was deleted
-    res.status(204).send()
-})
+
+// Serve the HTML file
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
 
 app.listen(port, () => {
-    console.log(`App running. Docs at http://localhost:${port}/docs`);
-})
+    console.log(`App running. Docs at http://localhost:${port}/`);
+});
