@@ -5,7 +5,6 @@
   "main": "index.js",
   "scripts": {
     "start": "nodemon -e js,json,yaml, html index.js"
-
   },
   "repository": {
     "type": "git",
@@ -19,6 +18,7 @@
   },
   "homepage": "https://github.com/henno/backend#readme",
   "dependencies": {
+    "@gradeup/email-verify": "^0.2.4",
     "bcrypt": "^5.1.0",
     "body-parser": "^1.20.2",
     "dotenv": "^16.0.3",

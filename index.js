@@ -1,5 +1,6 @@
 const express = require('express');
 const app = express();
+const verifier = require('@gradeup/email-verify')
 const swaggerUi = require('swagger-ui-express');
 const yamlJs = require('yamljs');
 const swaggerDocument = yamlJs.load('./swagger.yaml');
@@ -37,7 +38,7 @@ app.use((err, req, res, next) => {
 });
 
 // Register endpoint
-app.post('/users', (req, res) => {
+app.post('/users', async (req, res) => {
     // Get the required information from the request body
     const username = req.body.username;
     const email = req.body.email;
@@ -46,34 +47,47 @@ app.post('/users', (req, res) => {
 
     // Perform validation checks
     if (!username || !email || !password || !confirmPassword) {
-        return res.status(400).json({ message: 'All fields are required' });
+        return res.status(400).json({message: 'All fields are required'});
     }
 
     // Validate email structure
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-        return res.status(400).json({ message: 'Email address is invalid' });
+        return res.status(400).json({message: 'Email address is invalid'});
+    }
+
+    // Check if email already exists
+    if ('SELECT email from olmsp.users_info;' === req.body.email)
+        return res.status(409).send('Email already exists')
+
+
+    // check if username already exists
+    if ('SELECT name from olmsp.users_info;' === req.body.username)
+        return res.status(409).send('Username already exists')
+
+    try {
+        const result = await verifyEmail(req.body.email);
+        if (!result.success) {
+            return res.status(400).send('Invalid email: ' + result.info)
+        }
+        console.log('Email verified')
+    } catch (error) {
+        return res.status(400).send('Invalid email: ' + error.code)
     }
 
     // Validate username length
-    if (username.length < 6 || username.length > 12) {
-        return res.status(400).json({ message: 'Username must be between 6 and 12 characters long' });
+    if (username.length < 4 || username.length > 25) {
+        return res.status(400).json({message: 'Username must be between 6 and 25 characters long'});
     }
 
-    // Validate password length and format
-    if (password.length < 6 || password.length > 20) {
-        return res
-            .status(400)
-            .json({ message: 'Password must be between 6 and 20 characters long' });
+// Validate password length and format
+    if (password.length < 6 || password.length > 30 || !/\d/.test(password)) {
+        return res.status(400).json({message: 'Password must be between 6 and 30 characters long and contain at least one number'});
     }
 
-
-    if (!/\d/.test(password)) {
-        return res.status(400).json({ message: 'Password must contain at least one number' });
-    }
 
     if (password !== confirmPassword) {
-        return res.status(400).json({ message: 'Passwords do not match' });
+        return res.status(400).json({message: 'Passwords do not match'});
     }
 
     // Hash the password
@@ -81,17 +95,15 @@ app.post('/users', (req, res) => {
     bcrypt.hash(password, saltRounds, (err, hashedPassword) => {
         if (err) {
             console.error(err);
-            return res.status(500).json({ message: 'Error hashing password' });
+            return res.status(500).json({message: 'Error hashing password'});
         }
-
-
 
 
 // Check if the database is connected
         connection.connect((err) => {
             if (err) {
                 console.error('Error connecting to the database: ' + err.stack);
-                return res.status(500).json({ message: 'Error connecting to the database' });
+                return res.status(500).json({message: 'Error connecting to the database'});
             }
             console.log('Connected to the database as ID ' + connection.threadId);
 
@@ -101,12 +113,12 @@ app.post('/users', (req, res) => {
             connection.query(sql, values, (error, results) => {
                 if (error) {
                     console.error(error);
-                    return res.status(500).json({ message: 'Database error' });
+                    return res.status(500).json({message: 'Database error'});
                 }
                 console.log('New user added to the database:', results);
-                return res.status(201).json({ message: 'Account created successfully' });
+                return res.status(201).json({message: 'Account created successfully'});
             })
-    });
+        });
     });
 });
 
@@ -117,6 +129,24 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+
+
+
+
 app.listen(port, () => {
     console.log(`App running. Docs at http://localhost:${port}/`);
 });
+
+
+function verifyEmail(email) {
+    return new Promise((resolve, reject) => {
+        verifier.verify(email, (err, info) => {
+            console.log(err, info);
+            if (err) {
+                reject(JSON.stringify(err));
+            } else {
+                resolve(info);
+            }
+        });
+    });
+}

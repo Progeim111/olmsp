@@ -6,13 +6,15 @@
           content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <link rel="stylesheet" type="text/css" href="style.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-GLhlTQ8iRABdZLl6O3oVMWSktQOp6b7In1Zl3/Jr59b6EGGoI1aFkw7cmDA6j6gD" crossorigin="anonymous">
     <title>Online Learning Management System</title>
 </head>
 <body>
 <h1>HERE BE YOUR CLIENT APP</h1>
 <div class="container">
     <h1>Registration</h1>
-    <form action="/users" method="POST">
+    <form  id="create_account-form">
         <label for="username">Username:</label>
         <input type="text" id="username" name="username">
 
@@ -28,5 +30,83 @@
         <button type="submit">Register</button>
     </form>
 </div>
+
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-w76AqPfDkMBDXo30jS1Sgez6pr3x5MlQ1ZAGC+nuZB+EYdgRZgiwxhTBTkF7CXvN"
+        crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+
+
+<script>
+    const form = document.getElementById('create_account-form');
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const username = document.getElementById('username').value;
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const confirmPassword = document.getElementById('confirm-password').value;
+        if (password !== confirmPassword) {
+            swal.fire({
+                icon: 'error',
+                title: 'passwords do not match',
+                text: 'please check that your passwords match and try again.',
+            });
+            return;
+
+        }
+        axios.post('http://localhost:3000/api', {email, username})
+            .then(checkResponse => {
+                if (checkResponse.data.message === 'User already exists') {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Account creation failed',
+                        text: 'An account with this email already exists. Please try another email or log in if you already have an account.'
+                    });
+                } else {
+                    axios.post('/http://localhost:3000/api', { email, username, password })
+                        .then(response => {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Account created successfully',
+                                text: 'Your account has been created. You can now log in to Task Management.'
+                            });
+                            form.reset();
+                        })
+                        .catch(error => {
+                            console.error(error);
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Error',
+                                text: 'An error occurred while creating your account. Please try again later.'
+                            });
+                        });
+                }
+            })
+            .catch(checkError => {
+                console.error(checkError);
+                if (checkError.response.status === 409) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Account creation failed',
+                        text: 'An account with this email already exists. Please try another email or log in if you already have an account.'
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: 'An error occurred while checking if the user already exists. Please try again later.'
+                    });
+                }
+            });
+    });
+
+
+
+</script>
+
+
 </body>
 </html>

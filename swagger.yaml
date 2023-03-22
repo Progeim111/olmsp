@@ -3,6 +3,7 @@ info:
   title: ITA21
   version: 1.0.0
   description: Demonstration API
+  paths:
 paths:
   /sessions:
     summary: Path used to manage the list of sessions.
