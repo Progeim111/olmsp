@@ -28,7 +28,7 @@ app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 // Middleware to parse JSON and urlencoded request bodies
 app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.urlencoded({extended: false}));
 
 // General error handler
 app.use((err, req, res, next) => {
@@ -38,115 +38,80 @@ app.use((err, req, res, next) => {
 });
 
 // Register endpoint
-app.post('/users', async (req, res) => {
-    // Get the required information from the request body
-    const username = req.body.username;
-    const email = req.body.email;
-    const password = req.body.password;
-    const confirmPassword = req.body['confirm-password'];
-
-    // Perform validation checks
-    if (!username || !email || !password || !confirmPassword) {
-        return res.status(400).json({message: 'All fields are required'});
-    }
-
-    // Validate email structure
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-        return res.status(400).json({message: 'Email address is invalid'});
-    }
-
-    // Check if email already exists
-    if ('SELECT email from olmsp.users_info;' === req.body.email)
-        return res.status(409).send('Email already exists')
+app.post('/register', async (req, res) => {
+    // Get the username, email, password and confirm password from the request body
+    const {username, email, password} = req.body;
 
 
-    // check if username already exists
-    if ('SELECT name from olmsp.users_info;' === req.body.username)
-        return res.status(409).send('Username already exists')
+    console.log(username, email, password)
+    // Check if there are matching usernames or emails in the database
+    const username_query = `SELECT *
+                            FROM olmsp.users_info
+                            WHERE name = '${username}'`;
+    const email_query = `SELECT *
+                         FROM olmsp.users_info
+                         WHERE email = '${email}'`;
 
     try {
-        const result = await verifyEmail(req.body.email);
-        if (!result.success) {
-            return res.status(400).send('Invalid email: ' + result.info)
-        }
-        console.log('Email verified')
-    } catch (error) {
-        return res.status(400).send('Invalid email: ' + error.code)
-    }
 
-    // Validate username length
-    if (username.length < 4 || username.length > 25) {
-        return res.status(400).json({message: 'Username must be between 6 and 25 characters long'});
-    }
+        const username_result = await query(username_query);
+        const email_result = await query(email_query);
+        const emailInfo = await verifyEmail(email);
 
-// Validate password length and format
-    if (password.length < 6 || password.length > 30 || !/\d/.test(password)) {
-        return res.status(400).json({message: 'Password must be between 6 and 30 characters long and contain at least one number'});
-    }
+        console.log(username_result, email_result)
+        if (username_result.length > 0) {
+            res.status(400).send('Username already exists');
+        } else if (email_result.length > 0) {
+            res.status(400).send('Email already exists');
+        } else
+            // Verify the email
+        if (emailInfo.smtpCheck !== 'true') {
+            res.status(400).send('Invalid email address');
+        } else {
 
 
-    if (password !== confirmPassword) {
-        return res.status(400).json({message: 'Passwords do not match'});
-    }
+            // Hash the password
+            const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Hash the password
-    const saltRounds = 10;
-    bcrypt.hash(password, saltRounds, (err, hashedPassword) => {
-        if (err) {
-            console.error(err);
-            return res.status(500).json({message: 'Error hashing password'});
-        }
-
-
-// Check if the database is connected
-        connection.connect((err) => {
-            if (err) {
-                console.error('Error connecting to the database: ' + err.stack);
-                return res.status(500).json({message: 'Error connecting to the database'});
+            // Insert the new user into the database
+            const insert_query = `INSERT INTO olmsp.users_info (name, email, password)
+                                  VALUES ('${username}', '${email}', '${hashedPassword}')`;
+            const insert_result = await query(insert_query);
+            console.log(insert_result)
+            if (insert_result.affectedRows === 1) {
+                res.status(201).send('User registered');
+            } else {
+                res.status(400).send('Could not register user');
             }
-            console.log('Connected to the database as ID ' + connection.threadId);
 
-            // Perform the account creation and database storage code here
-            const sql = 'INSERT INTO olmsp.users_info (name, email, password) VALUES (?, ?, ?)';
-            const values = [username, email, hashedPassword];
-            connection.query(sql, values, (error, results) => {
-                if (error) {
-                    console.error(error);
-                    return res.status(500).json({message: 'Database error'});
-                }
-                console.log('New user added to the database:', results);
-                return res.status(201).json({message: 'Account created successfully'});
-            })
-        });
-    });
-});
-
+        }
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Internal server error');
+    }
+})
 
 
 // Serve the HTML file
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-
-
-
-
-app.listen(port, () => {
-    console.log(`App running. Docs at http://localhost:${port}/`);
-});
-
-
-function verifyEmail(email) {
-    return new Promise((resolve, reject) => {
-        verifier.verify(email, (err, info) => {
-            console.log(err, info);
-            if (err) {
-                reject(JSON.stringify(err));
-            } else {
-                resolve(info);
-            }
+        app.get('/', (req, res) => {
+            res.sendFile(path.join(__dirname, 'index.html'));
         });
-    });
-}
+
+
+        app.listen(port, () => {
+            console.log(`App running. Docs at http://localhost:${port}/`);
+        });
+
+
+        function verifyEmail(email) {
+            return new Promise((resolve, reject) => {
+                verifier.verify(email, (err, info) => {
+                    console.log(err, info);
+                    if (err) {
+                        reject(JSON.stringify(err));
+                    } else {
+                        resolve(info);
+                    }
+                });
+            });
+        }
