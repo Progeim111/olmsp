@@ -123,3 +123,12 @@ nav a {
 nav a:hover {
     text-decoration: underline;
 }
+
+
+/* modules */
+.module {
+    display: none;
+}
+.active {
+    display: block;
+}

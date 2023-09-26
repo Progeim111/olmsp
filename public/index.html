@@ -12,26 +12,57 @@
 </head>
 <body>
 <h1>HERE BE YOUR CLIENT APP</h1>
-<div class="container">
-    <h1 id="registerModalLabel">Register</h1>
-    <form id="create_account-form"  method="POST">
-        <label for="reg_username">Username:</label>
-        <p id="username_error"></p>
-        <input type="text" id="reg_username" name="username">
+<div class="upperbar"></div>
+<button id="register" type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#registerModal">
+    Register
+</button>
+<button id="login" type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#loginModal">Login
+</button>
 
-        <label for="reg_email">Email:</label>
-        <input type="email" id="reg_email" name="email">
 
-        <label for="reg_Password">Password:</label>
-        <input type="password" id="reg_Password" name="password">
+<div module="modal" id="registration_modal" class="module">
+    <div class="container">
+        <form id="create_account-form" method="POST">
+            <label for="reg_username">Username:</label>
+            <p id="username_error"></p>
+            <input type="text" id="reg_username" name="username">
 
-        <label for="reg_confirm_password">Confirm Password:</label>
-        <input type="password" id="reg_confirm_password" name="confirm-password">
 
-        <button id="submit" type="submit">Register</button>
-    </form>
+            <label for="reg_email">Email:</label>
+            <p id="email_error"></p>
+            <input type="email" id="reg_email" name="email">
+
+            <label for="reg_Password">Password:</label>
+            <p id="password_error"></p>
+            <input type="password" id="reg_Password" name="password">
+
+            <label for="reg_confirm_password">Confirm Password:</label>
+            <input type="password" id="reg_confirm_password" name="confirm-password">
+
+            <button id="submit" type="submit" disabled>Register</button>
+            <p>Already have an account? <a href="/login">Login</a></p>
+
+        </form>
+
+    </div>
 </div>
 
+<div module="modal" id="login_modal" class="module">
+    <div class="container">
+
+        <form id="login-form" action="/login" method="POST">
+            <label for="login_username">Username:</label>
+            <input type="text" id="login_username" name="username">
+
+            <label for="login_password">Password:</label>
+            <input type="password" id="login_password" name="password">
+
+            <button  type="submit">Login</button>
+            <p>Don't have an account? <a href="/register">Register</a></p>
+        </form>
+    </div>
+
+</div>
 
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"
@@ -41,64 +72,204 @@
 <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 
 <script>
+    //  Register form
     const username = document.querySelector('#reg_username');
     const email = document.querySelector('#reg_email');
     const password = document.querySelector('#reg_Password');
     const confirmPassword = document.querySelector('#reg_confirm_password');
-    const submit = document.querySelector('#submit');
-
+    const register_submit = document.querySelector('#submit');
+    // register form error
     const username_error = document.querySelector('#username_error');
+    const email_error = document.querySelector('#email_error');
+    const password_error = document.querySelector('#password_error');
+
+    // Login form
+    const login_username = document.querySelector('#login_username');
+    const login_password = document.querySelector('#login_password');
+    const login_submit = document.querySelector('#login_submit');
+
+    // Login form error
+
+    //modal
+    const register_modal = document.querySelector('#registration_modal');
+    const login_modal = document.querySelector('#login_modal');
+    const registerbutton = document.querySelector('#register');
+    const loginbutton = document.querySelector('#login');
+
+
+    registerbutton.addEventListener("click", () => {
+        register_modal.classList.add("active");
+        login_modal.classList.remove("active");
+    });
+
+    loginbutton.addEventListener("click", () => {
+        login_modal.classList.add("active");
+        register_modal.classList.remove("active");
+    });
 
     username.addEventListener('keyup', () => {
         if (username.value.length < 4) {
             username_error.textContent = 'Username must be at least 4 characters long!';
             // add style to the error message
             username_error.style.color = 'red';
+            register_submit.disabled = true;
+        } else if (username.value.length > 20) {
+            username_error.textContent = 'Username must be less than 20 characters long!';
+            // add style to the error message
+            username_error.style.color = 'red';
+
         } else {
             username_error.textContent = '';
+            register_submit.disabled = false;
         }
 
     })
+    email.addEventListener('keyup', () => {
+        // Regular expression for a valid email format
+        var emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$/;
 
+        if (!emailRegex.test(email.value)) {
+            email_error.textContent = 'Please enter a valid email address!';
+            // add style to the error message
+            email_error.style.color = 'red';
+            register_submit.disabled = true;
+        } else {
+            email_error.textContent = '';
+            register_submit.disabled = false;
+        }
+    })
 
-    submit.addEventListener('click', (e) => {
-        e.preventDefault();
+    password.addEventListener('keyup', () => {
+        // password has to be at least 6 characters long
+        if (password.value.length < 6) {
+            password_error.textContent = 'Password must be at least 6 characters long!';
+            password_error.style.color = 'red';
+            register_submit.disabled = true;
+        } else if (!password.value.match(/\d/)) {
+            password_error.textContent = 'Password must contain at least one number!';
+            password_error.style.color = 'red';
+            register_submit.disabled = true;
+        } else {
+            password_error.textContent = '';
+            register_submit.disabled = false;
+        }
+    });
+
+    confirmPassword.addEventListener('keyup', () => {
         if (password.value !== confirmPassword.value) {
-            Swal.fire({
-                icon: 'error',
-                title: 'Oops...',
-                text: 'Passwords do not match!',
-            })
-        } else if (username.value === '' || email.value === '' || password.value === '' || confirmPassword.value === '') {
+            password_error.textContent = 'Passwords do not match!';
+            password_error.style.color = 'red';
+            register_submit.disabled = true;
+        } else {
+            password_error.textContent = '';
+            register_submit.disabled = false;
+        }
+    })
+
+
+    login_submit.addEventListener('click', async (e) => {
+        e.preventDefault();
+        if (login_username.value === '' || login_password.value === '') {
             Swal.fire({
                 icon: 'error',
                 title: 'Oops...',
                 text: 'Please fill in all fields!',
             })
         } else {
-            axios.post('/register', {
+            const response = await fetch('/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    username: login_username.value,
+                    password: login_password.value,
+
+                }),
+            });
+            let {data} = await response.json();
+
+            if (data === 'Username or password does not match') {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Oops...',
+                    text: 'Username or password does not match!',
+                })
+            } else if (data === 'Password does not exist') {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Oops...',
+                    text: 'Password does not exist!',
+                })
+            } else if (response.status === 201) {
+                // make local storage for the token if not already exists
+                if (!localStorage.getItem('token')) {
+                    localStorage.setItem('token', data.token);
+                }
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Success!',
+                    text: 'You have successfully logged in!',
+                })
+                setTimeout(() => {
+                    window.location.href = '/dashboard';
+                }, 2000);
+            }
+        }
+    })
+
+
+    register_submit.addEventListener('click', async (e) => {
+        console.log('Username: ' + username.value);
+        console.log('Email: ' + email.value);
+        console.log('Password: ' + password.value);
+        e.preventDefault();
+        console.log('Register button clicked')
+        const response = await fetch('/register', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
                 username: username.value,
                 email: email.value,
                 password: password.value,
+
+            }),
+        });
+        let {data} = await response.json();
+
+        if (data === 'Username already exists') {
+            Swal.fire({
+                icon: 'error',
+                title: 'Oops...',
+                text: 'Username already exists!',
             })
-                .then((response) => {
-                    console.log(response);
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Success!',
-                        text: 'You have successfully registered!',
-                    })
-                })
-                .catch((error) => {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Oops...',
-                        text: 'Something went wrong!',
-                    })
-                })
+        } else if (data === 'Email already exists') {
+            Swal.fire({
+                icon: 'error',
+                title: 'Oops...',
+                text: 'Email already exists!',
+            })
+        } else if (data === 'User registered') {
+            Swal.fire({
+                icon: 'success',
+                title: 'Success!',
+                text: 'You have successfully registered!',
+            })
+            setTimeout(() => {
+                window.location.href = '/login';
+            }, 2000);
+
+
+        } else if (data === 'Could not register user') {
+            Swal.fire({
+                icon: 'error',
+                title: 'Oops...',
+                text: 'Could not register user!',
+            })
         }
-    }
-    )
+    })
 
 </script>
 
