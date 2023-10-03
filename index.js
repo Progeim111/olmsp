@@ -8,6 +8,8 @@ const path = require('path');
 const bodyParser = require('body-parser');
 const bcrypt = require('bcrypt');
 
+const crypto = require('crypto');
+
 require('dotenv').config();
 
 const connection = mysql.createConnection({
@@ -19,7 +21,7 @@ const connection = mysql.createConnection({
 
 const port = process.env.PORT || 3000;
 
-// Serve static files
+// Use public folder for static files
 app.use(express.static('public'));
 
 // Use the Swagger UI
@@ -35,86 +37,117 @@ app.use((err, req, res, next) => {
     const status = err.statusCode || 500;
     res.status(status).send(err.message);
 });
+// Check if there are matching usernames or emails in the database
+const username_query = 'SELECT count(*)  FROM users_info WHERE name = ?';
+const email_query = 'SELECT count(*) FROM users_info WHERE email = ?';
+
+//verify data inserted
+const verify_account = 'SELECT count(*) FROM users_info WHERE email = ? AND password = ? and name = ?';
 
 // Register endpoint
-app.post('/users', (req, res) => {
-    // Get the required information from the request body
-    const username = req.body.username;
-    const email = req.body.email;
-    const password = req.body.password;
-    const confirmPassword = req.body['confirm-password'];
+app.post('/register', async (req, res) => {
+    // Get the username, email, password, and confirm password from the request body
+    const { username, email, password } = req.body;
 
-    // Perform validation checks
-    if (!username || !email || !password || !confirmPassword) {
-        return res.status(400).json({ message: 'All fields are required' });
-    }
-
-    // Validate email structure
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-        return res.status(400).json({ message: 'Email address is invalid' });
-    }
-
-    // Validate username length
-    if (username.length < 6 || username.length > 12) {
-        return res.status(400).json({ message: 'Username must be between 6 and 12 characters long' });
-    }
-
-    // Validate password length and format
-    if (password.length < 6 || password.length > 20) {
-        return res
-            .status(400)
-            .json({ message: 'Password must be between 6 and 20 characters long' });
-    }
+    console.log(username, email, password);
 
 
-    if (!/\d/.test(password)) {
-        return res.status(400).json({ message: 'Password must contain at least one number' });
-    }
-
-    if (password !== confirmPassword) {
-        return res.status(400).json({ message: 'Passwords do not match' });
-    }
-
-    // Hash the password
-    const saltRounds = 10;
-    bcrypt.hash(password, saltRounds, (err, hashedPassword) => {
-        if (err) {
-            console.error(err);
-            return res.status(500).json({ message: 'Error hashing password' });
-        }
+    try {
+        // Check if the username or email already exists in the database
+        const usernameCount = (await usequery(username_query, [username]))[0]['count(*)'];
+        const emailCount = (await usequery(email_query, [email]))[0]['count(*)'];
 
 
 
 
-// Check if the database is connected
-        connection.connect((err) => {
-            if (err) {
-                console.error('Error connecting to the database: ' + err.stack);
-                return res.status(500).json({ message: 'Error connecting to the database' });
+        if (usernameCount > 0) {
+            const data = 'Username already exists'
+                res.send({data});
+            console.log('Username already exists');
+        } else if (emailCount > 0) {
+            const data = 'Email already exists'
+                res.send({data});
+            console.log('Email already exists');
+        } else {
+            // Hash the password
+            const hashedPassword = await bcrypt.hash(password, 10);
+
+            // Insert the new user into the database
+            const insert_query = 'INSERT INTO users_info (name, email, password) VALUES (?, ?, ?)';
+            await connection.query(insert_query, [username, email, hashedPassword]);
+
+            const insertcount = (await usequery (verify_account, [email, hashedPassword, username]))[0]['count(*)'];
+
+            if (insertcount === 1) {
+                const data = 'User registered successfully'
+                res.send({data});
+                console.log('User registered successfully');
+            } else {
+                const data = 'User registration failed'
+                res.send({data});
+                console.log('User registration failed');
             }
-            console.log('Connected to the database as ID ' + connection.threadId);
-
-            // Perform the account creation and database storage code here
-            const sql = 'INSERT INTO olmsp.users_info (name, email, password) VALUES (?, ?, ?)';
-            const values = [username, email, hashedPassword];
-            connection.query(sql, values, (error, results) => {
-                if (error) {
-                    console.error(error);
-                    return res.status(500).json({ message: 'Database error' });
-                }
-                console.log('New user added to the database:', results);
-                return res.status(201).json({ message: 'Account created successfully' });
-            })
-    });
-    });
+        }
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Internal server error');
+    }
 });
 
+function usequery (query, params) {
+    return new Promise((resolve, reject) => {
+        connection.query(query, params, (err, result) => {
+            if (err) return reject(err);
+            resolve(result);
+        });
+    });
+}
+
+const username_query_login = 'SELECT name, password FROM users_info WHERE name = ?';
+
+app.post('/login', async (req, res) => {
+    const { username, password } = req.body;
+
+    console.log(username, password);
+
+    try {
+        const user_result = await usequery(username_query_login, [username]);
+
+        console.log(user_result[0].name);
+        console.log(user_result[0].password);
+
+        if (user_result.length === 0) {
+            const data = 'Username or password does not match';
+            res.send({ data });
+        } else {
+            const hashedPassword = user_result[0].password;
+            const passwordCorrect = await bcrypt.compare(password, hashedPassword);
+            if (passwordCorrect) {
+                crypto.randomBytes(64, (err, buf) => {
+                    if (err) throw err;
+                    const token = buf.toString('hex');
+                    const message1 = 'Login successful';
+                    // Create an object with the message and token
+                    const responseData = { message1, token };
+
+                    // Send the object as the response
+                    res.send({responseData});
+                });
+            } else {
+                const data = 'Password does not exist';
+                res.send({ data });
+            }
+        }
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Internal server error');
+    }
+});
 
 
 // Serve the HTML file
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.listen(port, () => {
